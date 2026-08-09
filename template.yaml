@@ -1,0 +1,350 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Event Registration & Ticketing System — serverless REST API replacing
+  Microsoft Forms + Excel. DynamoDB + Lambda + API Gateway, with
+  CloudWatch monitoring, optional SNS confirmations, and AWS Budgets.
+
+Parameters:
+  Stage:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+    Description: Deployment stage, used to namespace resources.
+  AlertEmail:
+    Type: String
+    Description: Email address for CloudWatch alarm and budget notifications.
+  MonthlyBudgetLimit:
+    Type: Number
+    Default: 5
+    Description: Monthly cost budget in USD (keep low to stay inside Free Tier).
+  EnableConfirmationEmails:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: Toggle SNS-based confirmation emails.
+
+Conditions:
+  UseSns: !Equals [!Ref EnableConfirmationEmails, 'true']
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 10
+    MemorySize: 128
+    Tracing: Active
+    Layers:
+      - !Ref CommonLayer
+    Environment:
+      Variables:
+        LOG_LEVEL: INFO
+        EVENTS_TABLE: !Ref EventsTable
+        REGISTRATIONS_TABLE: !Ref RegistrationsTable
+        EMAIL_INDEX_NAME: EmailIndex
+        CONFIRMATION_TOPIC_ARN: !If [UseSns, !Ref ConfirmationTopic, '']
+  Api:
+    TracingEnabled: true
+    Cors:
+      AllowMethods: "'GET,POST,DELETE,OPTIONS'"
+      AllowHeaders: "'Content-Type'"
+      AllowOrigin: "'*'"
+
+Resources:
+
+  # ---------------------------------------------------------------------
+  # Shared code layer (validation / response helpers)
+  # ---------------------------------------------------------------------
+  CommonLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub event-ticketing-common-${Stage}
+      Description: Shared validation and response helpers
+      ContentUri: layers/common_layer/
+      CompatibleRuntimes:
+        - python3.12
+      RetentionPolicy: Delete
+    Metadata:
+      BuildMethod: python3.12
+
+  # ---------------------------------------------------------------------
+  # Data layer
+  # ---------------------------------------------------------------------
+  EventsTable:
+    Type: AWS::Serverless::SimpleTable
+    Properties:
+      TableName: !Sub Events-${Stage}
+      PrimaryKey:
+        Name: eventId
+        Type: String
+      SSESpecification:
+        SSEEnabled: true
+
+  RegistrationsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub Registrations-${Stage}
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: registrationId
+          AttributeType: S
+        - AttributeName: email
+          AttributeType: S
+      KeySchema:
+        - AttributeName: registrationId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: EmailIndex
+          KeySchema:
+            - AttributeName: email
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  # ---------------------------------------------------------------------
+  # Compute layer — one function per endpoint, least-privilege IAM
+  # ---------------------------------------------------------------------
+  RegisterFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub event-ticketing-register-${Stage}
+      CodeUri: src/register/
+      Handler: app.handler
+      Description: POST /register — creates a registration if the event has capacity
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref EventsTable
+        - Statement:
+            - Sid: UpdateEventCapacity
+              Effect: Allow
+              Action: dynamodb:UpdateItem
+              Resource: !GetAtt EventsTable.Arn
+            - Sid: WriteRegistration
+              Effect: Allow
+              Action: dynamodb:PutItem
+              Resource: !GetAtt RegistrationsTable.Arn
+        - !If
+          - UseSns
+          - Statement:
+              - Sid: PublishConfirmation
+                Effect: Allow
+                Action: sns:Publish
+                Resource: !Ref ConfirmationTopic
+          - !Ref AWS::NoValue
+      Events:
+        Register:
+          Type: Api
+          Properties:
+            Path: /register
+            Method: post
+            RequestParameters: []
+
+  ListEventsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub event-ticketing-list-events-${Stage}
+      CodeUri: src/list_events/
+      Handler: app.handler
+      Description: GET /events — lists all events (paginated)
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref EventsTable
+      Events:
+        ListEvents:
+          Type: Api
+          Properties:
+            Path: /events
+            Method: get
+
+  GetRegistrationsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub event-ticketing-get-registrations-${Stage}
+      CodeUri: src/get_registrations/
+      Handler: app.handler
+      Description: GET /registrations/{email} — lists a person's registrations
+      Policies:
+        - Statement:
+            - Sid: QueryByEmail
+              Effect: Allow
+              Action: dynamodb:Query
+              Resource:
+                - !GetAtt RegistrationsTable.Arn
+                - !Sub '${RegistrationsTable.Arn}/index/EmailIndex'
+      Events:
+        GetRegistrations:
+          Type: Api
+          Properties:
+            Path: /registrations/{email}
+            Method: get
+
+  CancelRegistrationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub event-ticketing-cancel-registration-${Stage}
+      CodeUri: src/cancel_registration/
+      Handler: app.handler
+      Description: DELETE /registration/{id} — cancels a registration and frees a seat
+      Policies:
+        - Statement:
+            - Sid: DeleteRegistration
+              Effect: Allow
+              Action: dynamodb:DeleteItem
+              Resource: !GetAtt RegistrationsTable.Arn
+            - Sid: ReleaseSeat
+              Effect: Allow
+              Action: dynamodb:UpdateItem
+              Resource: !GetAtt EventsTable.Arn
+      Events:
+        CancelRegistration:
+          Type: Api
+          Properties:
+            Path: /registration/{id}
+            Method: delete
+
+  # ---------------------------------------------------------------------
+  # Notifications
+  # ---------------------------------------------------------------------
+  ConfirmationTopic:
+    Type: AWS::SNS::Topic
+    Condition: UseSns
+    Properties:
+      TopicName: !Sub event-ticketing-confirmations-${Stage}
+
+  AlertsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub event-ticketing-ops-alerts-${Stage}
+
+  AlertsTopicSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref AlertsTopic
+      Protocol: email
+      Endpoint: !Ref AlertEmail
+
+  # ---------------------------------------------------------------------
+  # Monitoring — CloudWatch alarms per function + API-wide error rate
+  # ---------------------------------------------------------------------
+  RegisterErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub event-ticketing-register-errors-${Stage}
+      AlarmDescription: Register function error rate too high
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref RegisterFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 3
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertsTopic
+
+  LambdaDurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub event-ticketing-register-duration-${Stage}
+      AlarmDescription: Register function p90 duration approaching timeout
+      Namespace: AWS/Lambda
+      MetricName: Duration
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref RegisterFunction
+      ExtendedStatistic: p90
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 8000
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertsTopic
+
+  ApiGateway5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub event-ticketing-api-5xx-${Stage}
+      AlarmDescription: API Gateway 5xx error rate exceeds 5% of requests
+      Metrics:
+        - Id: errors
+          MetricStat:
+            Metric:
+              Namespace: AWS/ApiGateway
+              MetricName: 5XXError
+              Dimensions:
+                - Name: ApiName
+                  Value: !Sub event-ticketing-${Stage}
+            Period: 300
+            Stat: Sum
+          ReturnData: false
+        - Id: requests
+          MetricStat:
+            Metric:
+              Namespace: AWS/ApiGateway
+              MetricName: Count
+              Dimensions:
+                - Name: ApiName
+                  Value: !Sub event-ticketing-${Stage}
+            Period: 300
+            Stat: Sum
+          ReturnData: false
+        - Id: error_rate
+          Expression: "(errors / requests) * 100"
+          Label: ErrorRatePercent
+          ReturnData: true
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertsTopic
+
+  # ---------------------------------------------------------------------
+  # Cost control — stay inside AWS Free Tier
+  # ---------------------------------------------------------------------
+  MonthlyBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: !Sub event-ticketing-monthly-${Stage}
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit:
+          Amount: !Ref MonthlyBudgetLimit
+          Unit: USD
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 80
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref AlertEmail
+        - Notification:
+            NotificationType: FORECASTED
+            ComparisonOperator: GREATER_THAN
+            Threshold: 100
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref AlertEmail
+
+Outputs:
+  ApiEndpoint:
+    Description: Base URL of the deployed API
+    Value: !Sub https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/
+  EventsTableName:
+    Value: !Ref EventsTable
+  RegistrationsTableName:
+    Value: !Ref RegistrationsTable
+  AlertsTopicArn:
+    Value: !Ref AlertsTopic
+  ConfirmationTopicArn:
+    Condition: UseSns
+    Value: !Ref ConfirmationTopic

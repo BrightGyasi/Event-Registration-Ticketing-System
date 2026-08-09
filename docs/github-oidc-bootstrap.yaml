@@ -1,0 +1,105 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  One-time bootstrap: GitHub Actions OIDC provider + a deploy role scoped to
+  this project's CloudFormation stack. Deploy this once by hand (console or
+  `aws cloudformation deploy`) before the CI/CD pipeline can deploy the app.
+
+Parameters:
+  GitHubOrgAndRepo:
+    Type: String
+    Description: "e.g. your-org/event-ticketing-system"
+  StackNamePattern:
+    Type: String
+    Default: event-ticketing-*
+    Description: CloudFormation stack name(s) this role is allowed to manage.
+
+Resources:
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      ThumbprintList:
+        - 6938fd4d98bab03faadb97b34396831e3780aea1
+
+  GitHubDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: event-ticketing-github-deploy
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Ref GitHubOidcProvider
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              StringLike:
+                token.actions.githubusercontent.com:sub: !Sub repo:${GitHubOrgAndRepo}:ref:refs/heads/main
+      # Deliberately NOT AdministratorAccess: scoped to what `sam deploy`
+      # needs for THIS stack — CloudFormation, the app's own Lambda/API
+      # Gateway/DynamoDB/SNS/CloudWatch/Budgets resources, and the SAM
+      # managed deployment S3 bucket.
+      Policies:
+        - PolicyName: SamDeployScoped
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: CloudFormationDeploy
+                Effect: Allow
+                Action:
+                  - cloudformation:CreateChangeSet
+                  - cloudformation:DescribeChangeSet
+                  - cloudformation:ExecuteChangeSet
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:GetTemplate
+                  - cloudformation:CreateStack
+                  - cloudformation:UpdateStack
+                  - cloudformation:DeleteStack
+                  - cloudformation:ListStackResources
+                  - cloudformation:TagResource
+                Resource: !Sub arn:aws:cloudformation:*:${AWS::AccountId}:stack/${StackNamePattern}/*
+              - Sid: SamManagedBucket
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:ListBucket
+                  - s3:CreateBucket
+                  - s3:GetBucketLocation
+                Resource:
+                  - !Sub arn:aws:s3:::aws-sam-cli-managed-*
+                  - !Sub arn:aws:s3:::aws-sam-cli-managed-*/*
+              - Sid: AppResources
+                Effect: Allow
+                Action:
+                  - lambda:*
+                  - apigateway:*
+                  - dynamodb:*
+                  - sns:*
+                  - cloudwatch:*
+                  - logs:*
+                  - budgets:*
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:PassRole
+                  - iam:PutRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:TagRole
+                Resource: '*'
+                # NOTE: iam:* and service:* here are broad for a capstone.
+                # For a production system, narrow each Resource to ARNs
+                # containing the project prefix (e.g. event-ticketing-*)
+                # and add explicit Deny statements as a guardrail.
+
+Outputs:
+  DeployRoleArn:
+    Value: !GetAtt GitHubDeployRole.Arn
+    Description: Put this in the AWS_DEPLOY_ROLE_ARN GitHub secret

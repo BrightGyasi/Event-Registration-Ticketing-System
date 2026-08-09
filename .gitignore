@@ -1,0 +1,10 @@
+.aws-sam/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.env
+*.egg-info/
+.vscode/
+.idea/
+.DS_Store
