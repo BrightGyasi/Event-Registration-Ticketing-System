@@ -1,15 +1,18 @@
 version = 0.1
 
 [default.deploy.parameters]
-stack_name = "event-ticketing-dev"
+stack_name = "sam-app"
 resolve_s3 = true
-s3_prefix = "event-ticketing"
+s3_prefix = "sam-app"
 region = "us-east-1"
 confirm_changeset = true
 capabilities = "CAPABILITY_IAM"
-parameter_overrides = "Stage=dev AlertEmail=you@example.com MonthlyBudgetLimit=5 EnableConfirmationEmails=true"
+parameter_overrides = "Stage=\"dev\" AlertEmail=\"brytgyasi1@gmail.com\" MonthlyBudgetLimit=\"5\" EnableConfirmationEmails=\"true\""
 image_repositories = []
 
+
+[default.global.parameters]
+region = "us-east-1"
 [prod.deploy.parameters]
 stack_name = "event-ticketing-prod"
 resolve_s3 = true

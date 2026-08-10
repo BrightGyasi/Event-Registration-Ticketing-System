@@ -33,8 +33,6 @@ Globals:
     Timeout: 10
     MemorySize: 128
     Tracing: Active
-    Layers:
-      - !Ref CommonLayer
     Environment:
       Variables:
         LOG_LEVEL: INFO
@@ -50,21 +48,6 @@ Globals:
       AllowOrigin: "'*'"
 
 Resources:
-
-  # ---------------------------------------------------------------------
-  # Shared code layer (validation / response helpers)
-  # ---------------------------------------------------------------------
-  CommonLayer:
-    Type: AWS::Serverless::LayerVersion
-    Properties:
-      LayerName: !Sub event-ticketing-common-${Stage}
-      Description: Shared validation and response helpers
-      ContentUri: layers/common_layer/
-      CompatibleRuntimes:
-        - python3.12
-      RetentionPolicy: Delete
-    Metadata:
-      BuildMethod: python3.12
 
   # ---------------------------------------------------------------------
   # Data layer
