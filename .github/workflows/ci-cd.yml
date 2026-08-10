@@ -46,12 +46,12 @@ jobs:
         run: sam build
 
   # -----------------------------------------------------------------------
-  # Deploys to the dev stage automatically on every merge to main.
+  # Deploys to the prod stage automatically on every merge to main.
   # Uses short-lived credentials via GitHub's OIDC provider — no static
   # AWS access keys stored as secrets.
   # -----------------------------------------------------------------------
   deploy:
-    name: Deploy to AWS (dev)
+    name: Deploy to AWS (prod)
     needs: test
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
@@ -77,21 +77,21 @@ jobs:
       - name: SAM deploy
         run: |
           sam deploy \
-            --stack-name event-ticketing-dev \
+            --stack-name event-ticketing-prod \
             --resolve-s3 \
             --capabilities CAPABILITY_IAM \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
             --parameter-overrides \
-              Stage=dev \
+              Stage=prod \
               AlertEmail=${{ secrets.ALERT_EMAIL }} \
-              MonthlyBudgetLimit=5 \
+              MonthlyBudgetLimit=10 \
               EnableConfirmationEmails=true
 
       - name: Post-deploy smoke test
         run: |
           API_URL=$(aws cloudformation describe-stacks \
-            --stack-name event-ticketing-dev \
+            --stack-name event-ticketing-prod \
             --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" \
             --output text)
           echo "Checking $API_URL events endpoint responds..."
