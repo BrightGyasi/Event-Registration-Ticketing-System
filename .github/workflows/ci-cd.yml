@@ -51,6 +51,7 @@ jobs:
   # AWS access keys stored as secrets.
   # -----------------------------------------------------------------------
   deploy:
+    if: false
     name: Deploy to AWS (dev)
     needs: test
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
