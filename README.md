@@ -59,7 +59,7 @@ event-ticketing-system/
 ## Phase 2 — API development (done in this repo)
 
 The four endpoints are implemented in `src/*/app.py`. Each one:
-1. Validates and sanitizes input (see `layers/common_layer/python/common/validation.py`) — type checks, length caps, email regex, printable-character filtering.
+1. Validates and sanitizes input (see `layers/common_layer/python/validation.py`) — type checks, length caps, email regex, printable-character filtering.
 2. Returns structured JSON errors with the right HTTP status (`400` validation, `404` not found, `409` conflict/full, `500` unexpected).
 3. Uses least-privilege DynamoDB calls only (no scans on the hot path except the intentionally paginated `GET /events`).
 

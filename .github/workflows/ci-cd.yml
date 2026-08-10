@@ -43,7 +43,7 @@ jobs:
         run: sam validate --lint
 
       - name: SAM build (smoke test packaging)
-        run: sam build --use-container=false
+        run: sam build
 
   # -----------------------------------------------------------------------
   # Deploys to the dev stage automatically on every merge to main.

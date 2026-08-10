@@ -85,6 +85,15 @@ Resources:
           Projection:
             ProjectionType: ALL
 
+  CommonLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub event-ticketing-common-${Stage}
+      Description: Shared validation and response helpers for all Lambda functions
+      ContentUri: layers/common_layer/
+      CompatibleRuntimes:
+        - python3.12
+
   # ---------------------------------------------------------------------
   # Compute layer — one function per endpoint, least-privilege IAM
   # ---------------------------------------------------------------------
@@ -94,6 +103,8 @@ Resources:
       FunctionName: !Sub event-ticketing-register-${Stage}
       CodeUri: src/register/
       Handler: app.handler
+      Layers:
+        - !Ref CommonLayer
       Description: POST /register — creates a registration if the event has capacity
       Policies:
         - DynamoDBReadPolicy:
@@ -129,6 +140,8 @@ Resources:
       FunctionName: !Sub event-ticketing-list-events-${Stage}
       CodeUri: src/list_events/
       Handler: app.handler
+      Layers:
+        - !Ref CommonLayer
       Description: GET /events — lists all events (paginated)
       Policies:
         - DynamoDBReadPolicy:
@@ -146,6 +159,8 @@ Resources:
       FunctionName: !Sub event-ticketing-get-registrations-${Stage}
       CodeUri: src/get_registrations/
       Handler: app.handler
+      Layers:
+        - !Ref CommonLayer
       Description: GET /registrations/{email} — lists a person's registrations
       Policies:
         - Statement:
@@ -168,6 +183,8 @@ Resources:
       FunctionName: !Sub event-ticketing-cancel-registration-${Stage}
       CodeUri: src/cancel_registration/
       Handler: app.handler
+      Layers:
+        - !Ref CommonLayer
       Description: DELETE /registration/{id} — cancels a registration and frees a seat
       Policies:
         - Statement:
