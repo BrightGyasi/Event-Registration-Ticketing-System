@@ -53,9 +53,7 @@ jobs:
   deploy:
     name: Deploy to AWS (dev)
     needs: test
-    if: >-
-      (github.ref == 'refs/heads/main' && github.event_name == 'push') &&
-      (secrets.AWS_DEPLOY_ROLE_ARN != '' || secrets.AWS_ACCESS_KEY_ID != '')
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     environment: dev
     steps:
