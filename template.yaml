@@ -27,6 +27,19 @@ Parameters:
 Conditions:
   UseSns: !Equals [!Ref EnableConfirmationEmails, 'true']
 
+Resources:
+
+  ApiGatewayApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub event-ticketing-${Stage}
+      StageName: !Ref Stage
+      TracingEnabled: true
+      Cors:
+        AllowMethods: "'GET,POST,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type'"
+        AllowOrigin: "'*'"
+
 Globals:
   Function:
     Runtime: python3.12
@@ -40,12 +53,6 @@ Globals:
         REGISTRATIONS_TABLE: !Ref RegistrationsTable
         EMAIL_INDEX_NAME: EmailIndex
         CONFIRMATION_TOPIC_ARN: !If [UseSns, !Ref ConfirmationTopic, '']
-  Api:
-    TracingEnabled: true
-    Cors:
-      AllowMethods: "'GET,POST,DELETE,OPTIONS'"
-      AllowHeaders: "'Content-Type'"
-      AllowOrigin: "'*'"
 
 Resources:
 
@@ -119,6 +126,7 @@ Resources:
         Register:
           Type: Api
           Properties:
+            RestApiId: !Ref ApiGatewayApi
             Path: /register
             Method: post
             RequestParameters: []
@@ -137,6 +145,7 @@ Resources:
         ListEvents:
           Type: Api
           Properties:
+            RestApiId: !Ref ApiGatewayApi
             Path: /events
             Method: get
 
@@ -159,6 +168,7 @@ Resources:
         GetRegistrations:
           Type: Api
           Properties:
+            RestApiId: !Ref ApiGatewayApi
             Path: /registrations/{email}
             Method: get
 
@@ -183,6 +193,7 @@ Resources:
         CancelRegistration:
           Type: Api
           Properties:
+            RestApiId: !Ref ApiGatewayApi
             Path: /registration/{id}
             Method: delete
 
@@ -321,7 +332,7 @@ Resources:
 Outputs:
   ApiEndpoint:
     Description: Base URL of the deployed API
-    Value: !Sub https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/
+    Value: !Sub https://${ApiGatewayApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/
   EventsTableName:
     Value: !Ref EventsTable
   RegistrationsTableName:
