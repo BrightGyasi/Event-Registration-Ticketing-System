@@ -54,7 +54,6 @@ Globals:
         EMAIL_INDEX_NAME: EmailIndex
         CONFIRMATION_TOPIC_ARN: !If [UseSns, !Ref ConfirmationTopic, '']
 
-Resources:
 
   # ---------------------------------------------------------------------
   # Data layer
