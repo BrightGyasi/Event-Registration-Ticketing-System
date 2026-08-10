@@ -27,19 +27,6 @@ Parameters:
 Conditions:
   UseSns: !Equals [!Ref EnableConfirmationEmails, 'true']
 
-Resources:
-
-  ApiGatewayApi:
-    Type: AWS::Serverless::Api
-    Properties:
-      Name: !Sub event-ticketing-${Stage}
-      StageName: !Ref Stage
-      TracingEnabled: true
-      Cors:
-        AllowMethods: "'GET,POST,DELETE,OPTIONS'"
-        AllowHeaders: "'Content-Type'"
-        AllowOrigin: "'*'"
-
 Globals:
   Function:
     Runtime: python3.12
@@ -53,7 +40,18 @@ Globals:
         REGISTRATIONS_TABLE: !Ref RegistrationsTable
         EMAIL_INDEX_NAME: EmailIndex
         CONFIRMATION_TOPIC_ARN: !If [UseSns, !Ref ConfirmationTopic, '']
+Resources:
 
+  ApiGatewayApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub event-ticketing-${Stage}
+      StageName: !Ref Stage
+      TracingEnabled: true
+      Cors:
+        AllowMethods: "'GET,POST,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type'"
+        AllowOrigin: "'*'"
 
   # ---------------------------------------------------------------------
   # Data layer
