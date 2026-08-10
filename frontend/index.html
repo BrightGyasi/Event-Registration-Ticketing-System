@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Passline — Event registration &amp; ticketing</title>
+<meta name="description" content="Reserve a seat and get a real ticket. No forms, no spreadsheets.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="grain" aria-hidden="true"></div>
+
+<header class="topbar">
+  <a class="brand" href="#top">
+    <span class="brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 32 32" width="26" height="26"><path d="M2 12a4 4 0 0 0 0 8v6h28v-6a4 4 0 0 1 0-8V6H2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><line x1="20" y1="6" x2="20" y2="26" stroke="currentColor" stroke-width="2" stroke-dasharray="2.5 3"/></svg>
+    </span>
+    Passline
+  </a>
+  <nav class="topnav">
+    <a href="#events">Events</a>
+    <a href="#my-tickets">My tickets</a>
+  </nav>
+  <span class="status-pill" id="statusPill" role="status" aria-live="polite">
+    <span class="status-dot" id="statusDot"></span>
+    <span id="statusText">Connecting…</span>
+  </span>
+</header>
+
+<main id="top">
+
+  <section class="hero">
+    <div class="hero-copy">
+      <p class="eyebrow">Registration, without the spreadsheet</p>
+      <h1>Skip the form.<br>Get a real ticket.</h1>
+      <p class="hero-sub">Pick an event, reserve your seat, and hold a ticket you can actually show at the door — issued in one click, cancelled in one click.</p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="#events">Browse open events</a>
+        <a class="btn btn-ghost" href="#my-tickets">Find my ticket</a>
+      </div>
+    </div>
+    <div class="hero-ticket" aria-hidden="true">
+      <div class="stub-card hero-stub">
+        <div class="stub-main">
+          <p class="stub-eyebrow">Admit one</p>
+          <p class="stub-title">Your Event Here</p>
+          <p class="stub-meta">Somewhere · Sometime</p>
+        </div>
+        <div class="stub-notch stub-notch-top"></div>
+        <div class="stub-notch stub-notch-bottom"></div>
+        <div class="stub-tear"></div>
+        <div class="stub-side">
+          <p class="stub-code">PASS</p>
+          <p class="stub-seat" id="heroCount">—</p>
+          <p class="stub-seat-label">open now</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="events" id="events">
+    <div class="section-head">
+      <h2>Open events</h2>
+      <button class="btn btn-small btn-ghost" id="refreshEvents" type="button">Refresh</button>
+    </div>
+
+    <div id="eventsState" class="state-block" hidden>
+      <p id="eventsStateText"></p>
+      <button class="btn btn-small btn-primary" id="eventsRetry" type="button" hidden>Try again</button>
+    </div>
+
+    <div class="events-grid" id="eventsGrid"></div>
+  </section>
+
+  <section class="my-tickets" id="my-tickets">
+    <div class="section-head">
+      <h2>My tickets</h2>
+    </div>
+    <p class="section-sub">Enter the email you registered with to see and manage your tickets.</p>
+
+    <form class="lookup-form" id="lookupForm">
+      <label class="visually-hidden" for="lookupEmail">Email address</label>
+      <input type="email" id="lookupEmail" name="email" placeholder="you@example.com" required autocomplete="email">
+      <button class="btn btn-primary" type="submit">Find my tickets</button>
+    </form>
+
+    <div id="ticketsState" class="state-block" hidden>
+      <p id="ticketsStateText"></p>
+    </div>
+
+    <div class="tickets-grid" id="ticketsGrid"></div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <p>Passline — a serverless event registration &amp; ticketing system on AWS Lambda, API Gateway, and DynamoDB.</p>
+</footer>
+
+<!-- Registration dialog -->
+<dialog id="registerDialog" class="ticket-dialog">
+  <form method="dialog" class="dialog-inner" id="registerForm">
+    <button type="button" class="dialog-close" id="dialogClose" aria-label="Close">×</button>
+    <div id="registerStep">
+      <p class="eyebrow" id="dialogEventLabel">Reserve your seat</p>
+      <h3 id="dialogEventName">Event name</h3>
+      <p class="dialog-meta" id="dialogEventMeta"></p>
+
+      <label for="regName">Full name</label>
+      <input type="text" id="regName" name="name" placeholder="Ada Lovelace" required maxlength="100" autocomplete="name">
+
+      <label for="regEmail">Email</label>
+      <input type="email" id="regEmail" name="email" placeholder="you@example.com" required autocomplete="email">
+
+      <p class="form-error" id="registerError" hidden></p>
+
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-ghost" id="dialogCancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="registerSubmit">Confirm seat</button>
+      </div>
+    </div>
+
+    <div id="confirmStep" hidden>
+      <div class="stamp" id="confirmStamp" aria-hidden="true">Confirmed</div>
+      <p class="eyebrow">You're in</p>
+      <h3 id="confirmEventName">Event name</h3>
+      <p class="dialog-meta" id="confirmEventMeta"></p>
+      <div class="confirm-code">
+        <span>Registration ID</span>
+        <code id="confirmId"></code>
+      </div>
+      <p class="confirm-note">A copy of this is tied to your email — look it up any time under <strong>My tickets</strong>.</p>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-primary" id="confirmDone">Done</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
