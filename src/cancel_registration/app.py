@@ -8,7 +8,7 @@ import logging
 
 import boto3
 from botocore.exceptions import ClientError
-from common.validation import response, error_response, sanitize_str
+from validation import response, error_response, sanitize_str
 
 logger = logging.getLogger()
 logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))

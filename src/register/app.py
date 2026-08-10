@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 
 import boto3
 from botocore.exceptions import ClientError
-from common.validation import (
+from validation import (
     response,
     error_response,
     validate_register_payload,

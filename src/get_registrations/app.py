@@ -10,7 +10,7 @@ import logging
 
 import boto3
 from botocore.exceptions import ClientError
-from common.validation import response, error_response, is_valid_email
+from validation import response, error_response, is_valid_email
 
 logger = logging.getLogger()
 logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
