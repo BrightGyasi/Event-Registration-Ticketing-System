@@ -73,7 +73,7 @@ jobs:
           aws-region: us-east-1
 
       - name: SAM build
-        run: sam build --use-container=false
+        run: sam build --use-container
 
       - name: SAM deploy
         run: |
