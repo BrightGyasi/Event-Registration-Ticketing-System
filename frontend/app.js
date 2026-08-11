@@ -144,7 +144,7 @@
       const data = await api("events");
       const events = data.events || [];
       statusDot.className = "status-dot ok";
-      statusText.textContent = "API connected";
+      statusText.textContent = "online";
 
       if (events.length === 0) {
         eventsGrid.innerHTML = "";
@@ -173,8 +173,8 @@
         eventsStateText.textContent = "This site isn't pointed at an API yet — set API_BASE in config.js.";
         eventsRetry.hidden = true;
       } else {
-        statusText.textContent = "API unreachable";
-        eventsStateText.textContent = "Couldn't load events. Make sure the API is reachable, then try again.";
+        statusText.textContent = "unreachable";
+        eventsStateText.textContent = "Couldn't load events, try again.";
       }
     }
   }
